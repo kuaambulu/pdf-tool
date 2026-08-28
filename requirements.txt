@@ -1,0 +1,5 @@
+Flask
+pypdfium2
+Pillow
+Werkzeug
+gunicorn

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Merger & Kompresor - A4 Uniform</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: var(--text); max-width: 750px; margin: 40px auto; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        h2 { margin-top: 0; color: var(--primary); }
+        .upload-area { border: 2px dashed #cbd5e1; padding: 40px 20px; text-align: center; border-radius: 8px; background: #f1f5f9; cursor: pointer; display: block; margin-bottom: 20px;}
+        .upload-area:hover { border-color: var(--primary); background: #e0e7ff; }
+        input[type="file"] { display: none; }
+
+        .file-list { margin: 0 0 20px 0; padding: 0; list-style: none; }
+        .file-list li { background: #f8fafc; padding: 10px 15px; margin-bottom: 8px; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+        .file-info { flex-grow: 1; }
+        .file-actions button { background: #e2e8f0; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-left:5px; font-weight: bold;}
+        .file-actions button:hover { background: #cbd5e1; }
+        .file-actions button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .file-actions .btn-delete { color: #dc2626; }
+
+        fieldset { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; }
+        legend { font-weight: bold; color: var(--text); padding: 0 6px; font-size: 14px; }
+        .preset-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .preset-option { position: relative; }
+        .preset-option input { position: absolute; opacity: 0; }
+        .preset-option label { display: block; text-align: center; padding: 10px 4px; border: 2px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .preset-option label small { display: block; color: #64748b; font-size: 11px; margin-top: 2px; }
+        .preset-option input:checked + label { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: bold; }
+
+        .advanced-toggle { font-size: 13px; color: var(--primary); cursor: pointer; user-select: none; margin-top: 10px; display: inline-block; }
+        .advanced-panel { display: none; margin-top: 14px; border-top: 1px dashed #e2e8f0; padding-top: 14px; }
+        .advanced-panel.show { display: block; }
+        .field-row { margin-bottom: 14px; }
+        .field-row label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+        .field-row input[type="range"] { width: 100%; }
+        .field-row input[type="number"] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+        .qr-warning { font-size: 12px; color: #b45309; background: #fef3c7; padding: 8px 10px; border-radius: 6px; margin-top: 8px; display: none; }
+        .qr-warning.show { display: block; }
+
+        .btn { background-color: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { background-color: #94a3b8; cursor: not-allowed; }
+        .btn-secondary { background-color: white; color: var(--primary); border: 2px solid var(--primary); margin-bottom: 10px; }
+        #status, #preview-result { margin-top: 15px; font-weight: bold; text-align: center; }
+        .warning { font-size: 13px; color: #b45309; background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Gabung, Seragamkan A4 & Kompres PDF</h2>
+
+        <div class="warning">
+            ⚡ Seluruh halaman diseragamkan ke ukuran A4 dan QR Code/TTE dijaga agar tetap tergambar dan terbaca. Atur tingkat kompresi sesuai kebutuhan di bawah.
+        </div>
+
+        <label class="upload-area" id="drop-zone">
+            <span>Klik atau Seret file PDF ke sini</span>
+            <br><small>(Anda bisa memasukkan beberapa file dan mengatur urutannya)</small>
+            <input type="file" id="file-input" multiple accept="application/pdf">
+        </label>
+
+        <ul class="file-list" id="file-list"></ul>
+
+        <fieldset>
+            <legend>Tingkat Kompresi</legend>
+            <div class="preset-grid">
+                <div class="preset-option">
+                    <input type="radio" name="preset" id="preset-ringan" value="ringan">
+                    <label for="preset-ringan">Ringan<small>Kualitas terbaik</small></label>
+                </div>
+                <div class="preset-option">
+                    <input type="radio" name="preset" id="preset-sedang" value="sedang" checked>
+                    <label for="preset-sedang">Sedang<small>Seimbang</small></label>
+                </div>
+                <div class="preset-option">
+                    <input type="radio" name="preset" id="preset-kuat" value="kuat">
+                    <label for="preset-kuat">Kuat<small>Lebih kecil</small></label>
+                </div>
+                <div class="preset-option">
+                    <input type="radio" name="preset" id="preset-ekstrem" value="ekstrem">
+                    <label for="preset-ekstrem">Ekstrem<small>Sekecil mungkin</small></label>
+                </div>
+            </div>
+
+            <span class="advanced-toggle" id="advanced-toggle">⚙️ Pengaturan lanjutan (kualitas / target ukuran kustom) ▾</span>
+
+            <div class="advanced-panel" id="advanced-panel">
+                <div class="field-row">
+                    <label>Kualitas JPEG <span id="quality-value">60</span></label>
+                    <input type="range" id="quality-slider" min="30" max="95" value="60">
+                    <div class="hint">Di bawah 40 berisiko membuat QR Code/TTE sulit dipindai.</div>
+                </div>
+                <div class="field-row">
+                    <label>Resolusi (DPI) <span id="dpi-value">150</span></label>
+                    <input type="range" id="dpi-slider" min="72" max="200" value="150" step="1">
+                </div>
+                <div class="field-row">
+                    <label>Target ukuran total (KB) — opsional</label>
+                    <input type="number" id="target-kb" placeholder="Kosongkan untuk pakai kualitas di atas" min="1">
+                    <div class="hint">Jika diisi, sistem otomatis mencari kualitas tertinggi yang muat di target ini (tanpa turun dari batas aman QR).</div>
+                </div>
+                <div class="qr-warning" id="qr-warning">⚠️ Kualitas di bawah 40 dapat membuat QR Code/TTE menjadi sulit atau gagal dipindai.</div>
+            </div>
+        </fieldset>
+
+        <button class="btn btn-secondary" id="preview-btn" disabled>🔍 Pratinjau Ukuran</button>
+        <div id="preview-result"></div>
+
+        <button class="btn" id="process-btn" disabled>Proses & Unduh PDF</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const fileListElement = document.getElementById('file-list');
+        const processBtn = document.getElementById('process-btn');
+        const previewBtn = document.getElementById('preview-btn');
+        const statusDiv = document.getElementById('status');
+        const previewResultDiv = document.getElementById('preview-result');
+        const dropZone = document.getElementById('drop-zone');
+
+        const advancedToggle = document.getElementById('advanced-toggle');
+        const advancedPanel = document.getElementById('advanced-panel');
+        const qualitySlider = document.getElementById('quality-slider');
+        const qualityValue = document.getElementById('quality-value');
+        const dpiSlider = document.getElementById('dpi-slider');
+        const dpiValue = document.getElementById('dpi-value');
+        const targetKbInput = document.getElementById('target-kb');
+        const qrWarning = document.getElementById('qr-warning');
+
+        const PRESETS = {
+            ringan:  { dpi: 150, quality: 75 },
+            sedang:  { dpi: 120, quality: 60 },
+            kuat:    { dpi: 96,  quality: 45 },
+            ekstrem: { dpi: 72,  quality: 30 },
+        };
+
+        let selectedFiles = [];
+        let advancedMode = false;
+
+        // ---- Preset & advanced controls ----
+        document.querySelectorAll('input[name="preset"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const p = PRESETS[radio.value];
+                qualitySlider.value = p.quality;
+                dpiSlider.value = p.dpi;
+                qualityValue.textContent = p.quality;
+                dpiValue.textContent = p.dpi;
+                updateQrWarning();
+                clearPreviewResult();
+            });
+        });
+
+        advancedToggle.addEventListener('click', () => {
+            advancedMode = !advancedMode;
+            advancedPanel.classList.toggle('show', advancedMode);
+            advancedToggle.textContent = advancedMode
+                ? '⚙️ Pengaturan lanjutan (kualitas / target ukuran kustom) ▴'
+                : '⚙️ Pengaturan lanjutan (kualitas / target ukuran kustom) ▾';
+        });
+
+        qualitySlider.addEventListener('input', () => {
+            qualityValue.textContent = qualitySlider.value;
+            updateQrWarning();
+            clearPreviewResult();
+        });
+        dpiSlider.addEventListener('input', () => {
+            dpiValue.textContent = dpiSlider.value;
+            clearPreviewResult();
+        });
+        targetKbInput.addEventListener('input', clearPreviewResult);
+
+        function updateQrWarning() {
+            qrWarning.classList.toggle('show', Number(qualitySlider.value) < 40);
+        }
+
+        function clearPreviewResult() {
+            previewResultDiv.innerHTML = '';
+        }
+
+        function currentSettings() {
+            return {
+                quality: qualitySlider.value,
+                dpi: dpiSlider.value,
+                target_kb: targetKbInput.value ? targetKbInput.value : ''
+            };
+        }
+
+        // ---- File handling ----
+        fileInput.addEventListener('change', handleFiles);
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#2563eb'; });
+        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.borderColor = '#cbd5e1'; });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); dropZone.style.borderColor = '#cbd5e1';
+            if (e.dataTransfer.files.length) {
+                const newFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+                selectedFiles = selectedFiles.concat(newFiles);
+                updateFileList();
+            }
+        });
+
+        function handleFiles() {
+            const newFiles = Array.from(fileInput.files).filter(f => f.type === 'application/pdf');
+            selectedFiles = selectedFiles.concat(newFiles);
+            fileInput.value = '';
+            updateFileList();
+        }
+
+        function moveFile(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex >= 0 && newIndex < selectedFiles.length) {
+                const temp = selectedFiles[index];
+                selectedFiles[index] = selectedFiles[newIndex];
+                selectedFiles[newIndex] = temp;
+                updateFileList();
+            }
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+        }
+
+        function updateFileList() {
+            fileListElement.innerHTML = '';
+            let totalSize = 0;
+
+            selectedFiles.forEach((file, index) => {
+                totalSize += file.size;
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="file-info"><b>${index + 1}.</b> ${file.name} <span style="color:#64748b; font-size:12px;">(${(file.size/1024).toFixed(1)} KB)</span></div>
+                    <div class="file-actions">
+                        <button onclick="moveFile(${index}, -1)" ${index === 0 ? 'disabled' : ''} title="Naikkan">&#9650;</button>
+                        <button onclick="moveFile(${index}, 1)" ${index === selectedFiles.length - 1 ? 'disabled' : ''} title="Turunkan">&#9660;</button>
+                        <button class="btn-delete" onclick="removeFile(${index})" title="Hapus">&#10006;</button>
+                    </div>
+                `;
+                fileListElement.appendChild(li);
+            });
+
+            const hasFiles = selectedFiles.length > 0;
+            processBtn.disabled = !hasFiles;
+            previewBtn.disabled = !hasFiles;
+            clearPreviewResult();
+            statusDiv.innerHTML = hasFiles ? `Total Dokumen: ${selectedFiles.length} | Estimasi Awal: ${(totalSize / (1024 * 1024)).toFixed(2)} MB` : '';
+        }
+
+        // ---- Preview ukuran ----
+        previewBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            previewBtn.disabled = true;
+            previewBtn.textContent = "Menghitung estimasi...";
+            previewResultDiv.innerHTML = '';
+
+            const formData = new FormData();
+            selectedFiles.forEach((file) => formData.append('pdf_files[]', file));
+            const settings = currentSettings();
+            formData.append('quality', settings.quality);
+            formData.append('dpi', settings.dpi);
+            if (settings.target_kb) formData.append('target_kb', settings.target_kb);
+
+            try {
+                const response = await fetch('/preview', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Gagal membuat pratinjau.');
+
+                const mb = (data.estimated_kb / 1024).toFixed(2);
+                let msg = `📏 Estimasi ukuran akhir: <b>${mb} MB</b> (${data.total_pages} halaman) — kualitas ${data.quality_used}, ${data.dpi_used} DPI`;
+                if (settings.target_kb && !data.target_reached) {
+                    msg += `<br><span style="color:#b45309;">Target ${settings.target_kb} KB tidak tercapai tanpa mengorbankan keterbacaan QR — hasil memakai kualitas minimum aman.</span>`;
+                }
+                if (data.warning_qr) {
+                    msg += `<br><span style="color:#b45309;">⚠️ Kualitas ini berisiko membuat QR Code/TTE sulit dipindai.</span>`;
+                }
+                previewResultDiv.style.color = '#1e293b';
+                previewResultDiv.innerHTML = msg;
+            } catch (error) {
+                previewResultDiv.style.color = 'red';
+                previewResultDiv.innerHTML = `❌ ${error.message}`;
+            } finally {
+                previewBtn.disabled = false;
+                previewBtn.textContent = "🔍 Pratinjau Ukuran";
+            }
+        });
+
+        // ---- Proses & unduh ----
+        processBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            processBtn.disabled = true;
+            processBtn.textContent = "Sedang Meratakan & Mengompres...";
+            statusDiv.innerHTML = "Mohon tunggu, mesin sedang merender halaman ke A4...";
+            statusDiv.style.color = "#b45309";
+
+            const formData = new FormData();
+            selectedFiles.forEach((file) => formData.append('pdf_files[]', file));
+            const settings = currentSettings();
+            formData.append('quality', settings.quality);
+            formData.append('dpi', settings.dpi);
+            if (settings.target_kb) formData.append('target_kb', settings.target_kb);
+
+            try {
+                const response = await fetch('/process', { method: 'POST', body: formData });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || "Gagal memproses file.");
+                }
+
+                const usedQuality = response.headers.get('X-Quality-Used');
+                const targetReached = response.headers.get('X-Target-Reached');
+
+                const blob = await response.blob();
+                const finalSizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Dokumen_A4_Ringkas_${new Date().getTime()}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                setTimeout(() => window.URL.revokeObjectURL(url), 100);
+
+                let msg = `✅ Sukses! File berhasil diunduh. Ukuran Akhir: ${finalSizeMB} MB (kualitas ${usedQuality})`;
+                if (targetReached === 'false') {
+                    msg += `<br><span style="color:#b45309;">Target ukuran tidak sepenuhnya tercapai demi menjaga QR Code/TTE tetap terbaca.</span>`;
+                }
+                statusDiv.innerHTML = msg;
+                statusDiv.style.color = "green";
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerHTML = `❌ Terjadi kesalahan: ${error.message}`;
+                statusDiv.style.color = "red";
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = "Proses & Unduh PDF";
+            }
+        });
+    </script>
+</body>
+</html>
