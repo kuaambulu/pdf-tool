@@ -6,9 +6,11 @@
     <title>PDF Merger & Kompresor - A4 Uniform (100% di Browser)</title>
     <style>
         :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: var(--text); max-width: 750px; margin: 40px auto; padding: 20px; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: var(--text); max-width: 960px; margin: 40px auto; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); margin-bottom: 20px; }
         h2 { margin-top: 0; color: var(--primary); }
+        h3 { color: var(--text); font-size: 16px; margin-bottom: 10px; }
         .upload-area { border: 2px dashed #cbd5e1; padding: 40px 20px; text-align: center; border-radius: 8px; background: #f1f5f9; cursor: pointer; display: block; margin-bottom: 20px;}
         .upload-area:hover { border-color: var(--primary); background: #e0e7ff; }
         input[type="file"] { display: none; }
@@ -45,25 +47,61 @@
         .btn:hover { opacity: 0.9; }
         .btn:disabled { background-color: #94a3b8; cursor: not-allowed; }
         .btn-secondary { background-color: white; color: var(--primary); border: 2px solid var(--primary); margin-bottom: 10px; }
+        .btn-small { width: auto; padding: 6px 12px; font-size: 13px; border-radius: 5px; }
         #status, #preview-result { margin-top: 15px; font-weight: bold; text-align: center; }
         .warning { font-size: 13px; color: #b45309; background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 20px; }
         .privacy-note { font-size: 13px; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 6px; margin-bottom: 20px; }
         .progress-wrap { background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden; margin-top:10px; display:none; }
         .progress-wrap.show { display:block; }
         .progress-bar { background: var(--primary); height:100%; width:0%; transition: width 0.2s; }
+
+        .hidden { display: none !important; }
+
+        /* ---- Panel tanda tangan ---- */
+        .sig-asset-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .sig-asset-row .btn { width: auto; }
+        .sig-asset-preview { display: flex; align-items: center; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; }
+        .sig-asset-preview img { max-height: 40px; max-width: 100px; background: repeating-conic-gradient(#e2e8f0 0% 25%, white 0% 50%) 50% / 12px 12px; border: 1px solid #cbd5e1; border-radius: 4px; }
+        .sig-asset-preview button { border: none; background: none; color: #dc2626; cursor: pointer; font-weight: bold; }
+
+        /* ---- Grid halaman ---- */
+        #page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; margin-top: 16px; }
+        .page-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #fafbfc; }
+        .page-card .thumb-wrap { position: relative; width: 100%; background: white; }
+        .page-card canvas { width: 100%; height: auto; display: block; border: 1px solid #cbd5e1; }
+        .page-card .page-label { font-size: 12px; color: #64748b; margin: 8px 0 6px; text-align: center; }
+        .page-card .rotate-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 6px; }
+        .page-card .rotate-row button { background: #e2e8f0; border: none; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .page-card .rotate-row button:hover { background: #cbd5e1; }
+        .page-card .place-sig-btn { width: 100%; font-size: 12px; padding: 7px; }
+
+        .sig-overlay { position: absolute; cursor: move; touch-action: none; border: 1px dashed transparent; }
+        .sig-overlay:hover { border-color: var(--primary); }
+        .sig-overlay img { width: 100%; height: 100%; display: block; pointer-events: none; }
+        .sig-resize-handle { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; background: var(--primary); border: 2px solid white; border-radius: 50%; cursor: nwse-resize; touch-action: none; }
+        .sig-delete-handle { position: absolute; right: -10px; top: -10px; width: 20px; height: 20px; background: #dc2626; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; cursor: pointer; font-weight: bold; }
+
+        /* ---- Modal tanda tangan ---- */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+        .modal-overlay.show { display: flex; }
+        .modal-box { background: white; border-radius: 10px; padding: 20px; width: 100%; max-width: 560px; }
+        .modal-box h3 { margin-top: 0; }
+        #sig-pad-canvas { border: 2px dashed #cbd5e1; border-radius: 8px; width: 100%; height: 200px; touch-action: none; background: repeating-conic-gradient(#f1f5f9 0% 25%, white 0% 50%) 50% / 16px 16px; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+        .modal-actions .btn { width: auto; flex: 1; }
+        .modal-actions .btn-text { background: none; color: #64748b; border: none; }
+
+        .step-label { display:inline-block; background:var(--primary); color:white; font-size:12px; font-weight:bold; padding:3px 9px; border-radius:999px; margin-bottom:8px; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2>Gabung, Seragamkan A4 & Kompres PDF</h2>
+        <span class="step-label">LANGKAH 1</span>
+        <h2>Pilih & Urutkan File PDF</h2>
 
         <div class="privacy-note">
             🔒 Seluruh proses berjalan langsung di peramban Anda (JavaScript). Tidak ada file yang diunggah ke server mana pun — cocok untuk dokumen resmi/rahasia.
-        </div>
-
-        <div class="warning">
-            ⚡ Seluruh halaman diseragamkan ke ukuran A4 dan QR Code/TTE dijaga agar tetap tergambar dan terbaca. Atur tingkat kompresi sesuai kebutuhan di bawah.
         </div>
 
         <label class="upload-area" id="drop-zone">
@@ -73,6 +111,41 @@
         </label>
 
         <ul class="file-list" id="file-list"></ul>
+
+        <button class="btn" id="preview-pages-btn" disabled>🖼️ Pratinjau & Edit Halaman →</button>
+        <div id="preview-pages-status" style="margin-top:10px; font-size:13px; color:#64748b; text-align:center;"></div>
+    </div>
+
+    <div class="container hidden" id="step2-container">
+        <span class="step-label">LANGKAH 2</span>
+        <h2>Pratinjau, Rotasi & Tanda Tangan</h2>
+        <div class="hint" style="margin-bottom:14px;">Halaman lanskap (lebar) kini ditampilkan apa adanya — tidak lagi dipaksa menjadi potret. Gunakan tombol rotasi bila ada halaman hasil scan yang miring/terbalik.</div>
+
+        <fieldset>
+            <legend>🖋️ Tanda Tangan / Stempel</legend>
+            <div class="sig-asset-row">
+                <button class="btn btn-small btn-secondary" id="draw-sig-btn" type="button">✍️ Gambar Tanda Tangan</button>
+                <button class="btn btn-small btn-secondary" id="upload-sig-btn" type="button">📁 Unggah Gambar (PNG/JPEG)</button>
+                <input type="file" id="sig-file-input" accept="image/png, image/jpeg" style="display:none;">
+                <div class="sig-asset-preview hidden" id="sig-asset-preview">
+                    <img id="sig-asset-img" alt="Pratinjau tanda tangan">
+                    <span style="font-size:12px; color:#166534;">Siap ditempel</span>
+                    <button id="clear-sig-asset-btn" title="Hapus">✕</button>
+                </div>
+            </div>
+            <div class="hint">Gunakan gambar PNG transparan agar tanda tangan menyatu rapi dengan dokumen (bukan kotak putih). Setelah siap, klik "📌 Tempel di sini" pada halaman yang dituju, lalu geser/ubah ukurannya langsung di atas pratinjau.</div>
+        </fieldset>
+
+        <div id="page-grid"></div>
+    </div>
+
+    <div class="container hidden" id="step3-container">
+        <span class="step-label">LANGKAH 3</span>
+        <h2>Kompresi & Unduh</h2>
+
+        <div class="warning">
+            ⚡ Seluruh halaman dikompres sesuai pengaturan di bawah. QR Code/TTE dijaga agar tetap tergambar dan terbaca.
+        </div>
 
         <fieldset>
             <legend>Tingkat Kompresi</legend>
@@ -116,12 +189,26 @@
             </div>
         </fieldset>
 
-        <button class="btn btn-secondary" id="preview-btn" disabled>🔍 Pratinjau Ukuran</button>
+        <button class="btn btn-secondary" id="preview-btn">🔍 Pratinjau Ukuran</button>
         <div id="preview-result"></div>
 
-        <button class="btn" id="process-btn" disabled>Proses & Unduh PDF</button>
+        <button class="btn" id="process-btn">Proses & Unduh PDF</button>
         <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
         <div id="status"></div>
+    </div>
+
+    <!-- Modal: gambar tanda tangan -->
+    <div class="modal-overlay" id="sig-modal">
+        <div class="modal-box">
+            <h3>✍️ Gambar Tanda Tangan</h3>
+            <canvas id="sig-pad-canvas"></canvas>
+            <div class="hint">Gambar dengan mouse atau jari. Latar belakang otomatis transparan.</div>
+            <div class="modal-actions">
+                <button class="btn btn-text" id="sig-pad-clear">Hapus Coretan</button>
+                <button class="btn btn-secondary" id="sig-pad-cancel">Batal</button>
+                <button class="btn" id="sig-pad-save">Gunakan Tanda Tangan Ini</button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="app.js"></script>
