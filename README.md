@@ -62,6 +62,29 @@ Lalu di repo GitHub:
 
 Setiap `git push` berikutnya otomatis memperbarui situs.
 
+## Fitur v3 (terbaru)
+
+- **Warna TTD Canvas** — saat menggambar tanda tangan, kini tersedia
+  pilihan warna: Biru Tua (default), Hitam, Biru, atau warna kustom
+  bebas lewat color picker.
+- **Perbaikan bug ukuran TTD/stempel gepeng** — versi sebelumnya
+  menyimpan ukuran sebagai dua rasio lebar/tinggi yang masing-masing
+  dihitung terhadap lebar/tinggi kanvas secara terpisah. Karena rasio
+  lebar:tinggi halaman A4 berbeda antara potret dan lanskap, ukuran
+  yang sama tampil menyempit di halaman potret dan memanjang di
+  halaman lanskap. Sekarang ukuran disimpan sebagai lebar fisik dalam
+  **milimeter** (konsisten di kertas, apa pun orientasinya) dengan
+  tinggi mengikuti rasio asli gambar — sudah diverifikasi dengan
+  perhitungan langsung: ukuran yang sama kini identik presisinya di
+  kedua orientasi.
+- **Ukuran kustom presisi** — setiap TTD/stempel yang sudah ditempel
+  muncul di daftar kecil bawah kartu halaman dengan kolom angka
+  (mm) yang bisa diketik langsung, selain bisa diseret lewat titik
+  biru di pojok gambar.
+- **Tempel gambar Stempel (PNG)** — panel terpisah dari TTD, khusus
+  untuk menempelkan gambar stempel resmi (wajib PNG transparan).
+  Bisa dipakai bersamaan dengan TTD pada halaman yang sama.
+
 ## Fitur v2
 
 - **Perbaikan bug "halaman lanskap jadi potret"** — versi sebelumnya selalu
