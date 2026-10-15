@@ -96,17 +96,34 @@ function loadImage(src) {
   });
 }
 
-/** Menggambar semua tanda tangan (ratio 0..1 relatif thd kanvas) ke kanvas target. */
-async function bakeSignatures(canvas, signatures) {
+/**
+ * Menggambar semua tanda tangan/stempel ke kanvas target.
+ *
+ * PERBAIKAN BUG "TTD menyempit di potret / memanjang di lanskap": versi
+ * sebelumnya menyimpan lebar & tinggi sebagai dua rasio (wRatio, hRatio)
+ * yang MASING-MASING dihitung terhadap lebar dan tinggi kanvas secara
+ * independen. Karena rasio lebar:tinggi kanvas A4 berbeda antara potret
+ * (210:297) dan lanskap (297:210), kombinasi rasio yang sama menghasilkan
+ * bentuk piksel yang berbeda (gepeng) tergantung orientasi halaman.
+ *
+ * Perbaikannya: ukuran disimpan sebagai `widthMm` (ukuran fisik asli,
+ * dalam milimeter kertas A4 — SAMA untuk semua orientasi) dan tinggi
+ * diturunkan dari rasio alami gambar (`aspect`), lalu dikonversi ke
+ * piksel memakai skala mm->px masing-masing sumbu kanvas. Hasilnya
+ * ukuran fisik tanda tangan konsisten apa pun orientasi halamannya.
+ */
+async function bakeSignatures(canvas, signatures, landscape) {
   if (!signatures || signatures.length === 0) return;
+  const { w: pageWmm, h: pageHmm } = pageMm(landscape);
   const ctx = canvas.getContext('2d');
   for (const sig of signatures) {
     const img = await loadImage(sig.dataUrl);
+    const widthPx = (sig.widthMm / pageWmm) * canvas.width;
+    const heightMm = sig.widthMm * sig.aspect;
+    const heightPx = (heightMm / pageHmm) * canvas.height;
     const x = sig.xRatio * canvas.width;
     const y = sig.yRatio * canvas.height;
-    const w = sig.wRatio * canvas.width;
-    const h = sig.hRatio * canvas.height;
-    ctx.drawImage(img, x, y, w, h);
+    ctx.drawImage(img, x, y, widthPx, heightPx);
   }
 }
 
@@ -169,8 +186,15 @@ let docCache = [];
  *   previewLandscape }
  */
 let pages = [];
-let preparedSignatureAsset = null; // { dataUrl }
+let preparedSignatureAsset = null; // { dataUrl, aspect }
+let preparedStempelAsset = null;   // { dataUrl, aspect }
 let sigIdCounter = 0;
+let currentSigColor = '#1e3a8a'; // default: biru tua
+
+/** Ukuran fisik halaman A4 dalam mm, sesuai orientasi. */
+function pageMm(landscape) {
+  return landscape ? { w: 297, h: 210 } : { w: 210, h: 297 };
+}
 
 // ============================================================================
 // UI refs
@@ -192,11 +216,19 @@ const sigAssetPreview = document.getElementById('sig-asset-preview');
 const sigAssetImg = document.getElementById('sig-asset-img');
 const clearSigAssetBtn = document.getElementById('clear-sig-asset-btn');
 
+const uploadStempelBtn = document.getElementById('upload-stempel-btn');
+const stempelFileInput = document.getElementById('stempel-file-input');
+const stempelAssetPreview = document.getElementById('stempel-asset-preview');
+const stempelAssetImg = document.getElementById('stempel-asset-img');
+const clearStempelAssetBtn = document.getElementById('clear-stempel-asset-btn');
+
 const sigModal = document.getElementById('sig-modal');
 const sigPadCanvas = document.getElementById('sig-pad-canvas');
 const sigPadClear = document.getElementById('sig-pad-clear');
 const sigPadCancel = document.getElementById('sig-pad-cancel');
 const sigPadSave = document.getElementById('sig-pad-save');
+const sigColorCustom = document.getElementById('sig-color-custom');
+const sigColorSwatches = document.querySelectorAll('.color-swatch');
 
 const processBtn = document.getElementById('process-btn');
 const previewBtn = document.getElementById('preview-btn');
@@ -375,15 +407,27 @@ function buildPageCard(pageEntry, canvas) {
   rotateRow.appendChild(rotLeftBtn);
   rotateRow.appendChild(rotRightBtn);
 
-  const placeBtn = document.createElement('button');
-  placeBtn.type = 'button';
-  placeBtn.className = 'btn btn-small btn-secondary place-sig-btn';
-  placeBtn.textContent = '📌 Tempel di sini';
+  const placeRow = document.createElement('div');
+  placeRow.className = 'place-sig-row';
+  const placeTtdBtn = document.createElement('button');
+  placeTtdBtn.type = 'button';
+  placeTtdBtn.className = 'btn btn-secondary';
+  placeTtdBtn.textContent = '📌 TTD';
+  const placeStempelBtn = document.createElement('button');
+  placeStempelBtn.type = 'button';
+  placeStempelBtn.className = 'btn btn-secondary';
+  placeStempelBtn.textContent = '📌 Stempel';
+  placeRow.appendChild(placeTtdBtn);
+  placeRow.appendChild(placeStempelBtn);
+
+  const sizeList = document.createElement('div');
+  sizeList.className = 'sig-size-list';
 
   card.appendChild(wrap);
   card.appendChild(label);
   card.appendChild(rotateRow);
-  card.appendChild(placeBtn);
+  card.appendChild(placeRow);
+  card.appendChild(sizeList);
   pageGrid.appendChild(card);
 
   async function rerenderThumb(newRotation) {
@@ -396,29 +440,36 @@ function buildPageCard(pageEntry, canvas) {
     pageEntry.previewLandscape = landscape;
     wrap.innerHTML = '';
     wrap.appendChild(newCanvas);
-    renderSignatureOverlays(wrap, pageEntry);
+    renderSignatureOverlays(wrap, pageEntry, sizeList);
   }
 
   rotLeftBtn.addEventListener('click', () => rerenderThumb(pageEntry.userRotation - 90));
   rotRightBtn.addEventListener('click', () => rerenderThumb(pageEntry.userRotation + 90));
 
-  placeBtn.addEventListener('click', () => {
-    if (!preparedSignatureAsset) {
-      alert('Siapkan tanda tangan dulu: klik "Gambar Tanda Tangan" atau "Unggah Gambar" di atas.');
+  function placeAsset(type) {
+    const asset = type === 'ttd' ? preparedSignatureAsset : preparedStempelAsset;
+    if (!asset) {
+      alert(type === 'ttd'
+        ? 'Siapkan tanda tangan dulu: klik "Gambar Tanda Tangan" atau "Unggah Gambar" di panel TTD.'
+        : 'Siapkan gambar stempel dulu: klik "Unggah Gambar Stempel (PNG)" di panel Stempel.');
       return;
     }
     pageEntry.signatures.push({
       id: ++sigIdCounter,
-      dataUrl: preparedSignatureAsset.dataUrl,
+      type,
+      dataUrl: asset.dataUrl,
+      aspect: asset.aspect,
       xRatio: 0.55,
       yRatio: 0.78,
-      wRatio: 0.35,
-      hRatio: 0.12,
+      widthMm: type === 'ttd' ? 40 : 30, // ukuran awal; bisa diubah custom (geser/resize atau input mm)
     });
-    renderSignatureOverlays(wrap, pageEntry);
-  });
+    renderSignatureOverlays(wrap, pageEntry, sizeList);
+  }
 
-  renderSignatureOverlays(wrap, pageEntry);
+  placeTtdBtn.addEventListener('click', () => placeAsset('ttd'));
+  placeStempelBtn.addEventListener('click', () => placeAsset('stempel'));
+
+  renderSignatureOverlays(wrap, pageEntry, sizeList);
 }
 
 async function getPageProxy(fileIndex, pageNum) {
@@ -430,18 +481,33 @@ async function getPageProxy(fileIndex, pageNum) {
 }
 
 // ---------------------------------------------------------------------------
-// Overlay tanda tangan: render, geser (drag), ubah ukuran, hapus
+// Overlay tanda tangan/stempel: render, geser (drag), ubah ukuran, hapus
 // ---------------------------------------------------------------------------
-function renderSignatureOverlays(wrap, pageEntry) {
+
+/** Lebar/tinggi overlay dalam persen (%), dihitung dari ukuran fisik (mm)
+ *  agar bentuknya selalu benar (tidak gepeng) di orientasi mana pun. */
+function overlayGeometryPercent(pageEntry, sig) {
+  const { w: pageWmm, h: pageHmm } = pageMm(pageEntry.previewLandscape);
+  const widthPercent = (sig.widthMm / pageWmm) * 100;
+  const heightMm = sig.widthMm * sig.aspect;
+  const heightPercent = (heightMm / pageHmm) * 100;
+  return { widthPercent, heightPercent };
+}
+
+function renderSignatureOverlays(wrap, pageEntry, sizeList) {
   wrap.querySelectorAll('.sig-overlay').forEach((el) => el.remove());
+  if (sizeList) sizeList.innerHTML = '';
 
   pageEntry.signatures.forEach((sig) => {
+    const { widthPercent, heightPercent } = overlayGeometryPercent(pageEntry, sig);
+
     const overlay = document.createElement('div');
     overlay.className = 'sig-overlay';
+    overlay.dataset.sigId = String(sig.id);
     overlay.style.left = `${sig.xRatio * 100}%`;
     overlay.style.top = `${sig.yRatio * 100}%`;
-    overlay.style.width = `${sig.wRatio * 100}%`;
-    overlay.style.height = `${sig.hRatio * 100}%`;
+    overlay.style.width = `${widthPercent}%`;
+    overlay.style.height = `${heightPercent}%`;
 
     const img = document.createElement('img');
     img.src = sig.dataUrl;
@@ -460,10 +526,10 @@ function renderSignatureOverlays(wrap, pageEntry) {
     deleteHandle.addEventListener('click', (e) => {
       e.stopPropagation();
       pageEntry.signatures = pageEntry.signatures.filter((s) => s.id !== sig.id);
-      renderSignatureOverlays(wrap, pageEntry);
+      renderSignatureOverlays(wrap, pageEntry, sizeList);
     });
 
-    // --- Geser (drag) ---
+    // --- Geser (drag posisi) ---
     overlay.addEventListener('pointerdown', (e) => {
       if (e.target === resizeHandle || e.target === deleteHandle) return;
       e.preventDefault();
@@ -475,12 +541,13 @@ function renderSignatureOverlays(wrap, pageEntry) {
       function onMove(ev) {
         const dxRatio = (ev.clientX - startX) / rect.width;
         const dyRatio = (ev.clientY - startY) / rect.height;
-        sig.xRatio = clamp(startXRatio + dxRatio, 0, 1 - sig.wRatio);
-        sig.yRatio = clamp(startYRatio + dyRatio, 0, 1 - sig.hRatio);
+        const { widthPercent: wp, heightPercent: hp } = overlayGeometryPercent(pageEntry, sig);
+        sig.xRatio = clamp(startXRatio + dxRatio, 0, 1 - wp / 100);
+        sig.yRatio = clamp(startYRatio + dyRatio, 0, 1 - hp / 100);
         overlay.style.left = `${sig.xRatio * 100}%`;
         overlay.style.top = `${sig.yRatio * 100}%`;
       }
-      function onUp(ev) {
+      function onUp() {
         overlay.releasePointerCapture(e.pointerId);
         overlay.removeEventListener('pointermove', onMove);
         overlay.removeEventListener('pointerup', onUp);
@@ -489,23 +556,25 @@ function renderSignatureOverlays(wrap, pageEntry) {
       overlay.addEventListener('pointerup', onUp);
     });
 
-    // --- Ubah ukuran (resize, kunci rasio) ---
+    // --- Ubah ukuran (seret titik biru; ukuran FISIK dalam mm, rasio gambar terkunci) ---
     resizeHandle.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
       const rect = wrap.getBoundingClientRect();
+      const { w: pageWmm } = pageMm(pageEntry.previewLandscape);
+      const mmPerPx = pageWmm / rect.width; // konversi gerak piksel layar -> mm fisik
       const startX = e.clientX;
-      const startWRatio = sig.wRatio;
-      const aspect = sig.hRatio / sig.wRatio;
+      const startWidthMm = sig.widthMm;
       resizeHandle.setPointerCapture(e.pointerId);
 
       function onMove(ev) {
-        const dxRatio = (ev.clientX - startX) / rect.width;
-        let newW = clamp(startWRatio + dxRatio, 0.05, 1 - sig.xRatio);
-        sig.wRatio = newW;
-        sig.hRatio = newW * aspect;
-        overlay.style.width = `${sig.wRatio * 100}%`;
-        overlay.style.height = `${sig.hRatio * 100}%`;
+        const dxMm = (ev.clientX - startX) * mmPerPx;
+        sig.widthMm = clamp(startWidthMm + dxMm, 10, pageWmm * 0.95);
+        const { widthPercent: wp, heightPercent: hp } = overlayGeometryPercent(pageEntry, sig);
+        overlay.style.width = `${wp}%`;
+        overlay.style.height = `${hp}%`;
+        const mmInput = sizeList && sizeList.querySelector(`input[data-sig-id="${sig.id}"]`);
+        if (mmInput) mmInput.value = Math.round(sig.widthMm);
       }
       function onUp() {
         resizeHandle.releasePointerCapture(e.pointerId);
@@ -517,6 +586,58 @@ function renderSignatureOverlays(wrap, pageEntry) {
     });
 
     wrap.appendChild(overlay);
+
+    // --- Baris kontrol ukuran presisi (mm) di bawah kartu ---
+    if (sizeList) {
+      const row = document.createElement('div');
+      row.className = 'sig-size-row';
+
+      const rowLabel = document.createElement('span');
+      rowLabel.className = 'sig-row-label';
+      rowLabel.textContent = sig.type === 'stempel' ? '🔖 Stempel' : '✍️ TTD';
+
+      const mmInput = document.createElement('input');
+      mmInput.type = 'number';
+      mmInput.min = '10';
+      mmInput.max = '400';
+      mmInput.step = '1';
+      mmInput.value = String(Math.round(sig.widthMm));
+      mmInput.dataset.sigId = String(sig.id);
+      mmInput.title = 'Lebar dalam milimeter (tinggi menyesuaikan otomatis)';
+
+      const mmUnit = document.createElement('span');
+      mmUnit.textContent = 'mm';
+
+      const rowDelete = document.createElement('button');
+      rowDelete.type = 'button';
+      rowDelete.className = 'sig-row-delete';
+      rowDelete.textContent = '🗑';
+      rowDelete.title = 'Hapus';
+
+      mmInput.addEventListener('input', () => {
+        const val = Number(mmInput.value);
+        if (!Number.isFinite(val)) return;
+        const { w: pageWmm } = pageMm(pageEntry.previewLandscape);
+        sig.widthMm = clamp(val, 10, pageWmm * 0.95);
+        const { widthPercent: wp, heightPercent: hp } = overlayGeometryPercent(pageEntry, sig);
+        const overlayEl = wrap.querySelector(`.sig-overlay[data-sig-id="${sig.id}"]`);
+        if (overlayEl) {
+          overlayEl.style.width = `${wp}%`;
+          overlayEl.style.height = `${hp}%`;
+        }
+      });
+
+      rowDelete.addEventListener('click', () => {
+        pageEntry.signatures = pageEntry.signatures.filter((s) => s.id !== sig.id);
+        renderSignatureOverlays(wrap, pageEntry, sizeList);
+      });
+
+      row.appendChild(rowLabel);
+      row.appendChild(mmInput);
+      row.appendChild(mmUnit);
+      row.appendChild(rowDelete);
+      sizeList.appendChild(row);
+    }
   });
 }
 
@@ -525,17 +646,36 @@ function clamp(v, min, max) {
 }
 
 // ---------------------------------------------------------------------------
-// Panel tanda tangan: siapkan aset (gambar tangan atau unggah gambar)
+// Panel TTD & Stempel: siapkan aset (gambar tangan / unggah gambar)
 // ---------------------------------------------------------------------------
-function setPreparedSignature(dataUrl) {
-  preparedSignatureAsset = { dataUrl };
+
+/** Memuat gambar untuk mengetahui rasio tinggi:lebar aslinya (dipakai agar
+ *  ukuran custom tetap proporsional, tidak gepeng, saat di-resize). */
+async function prepareAsset(dataUrl) {
+  const img = await loadImage(dataUrl);
+  return { dataUrl, aspect: img.naturalHeight / img.naturalWidth };
+}
+
+async function setPreparedSignature(dataUrl) {
+  preparedSignatureAsset = await prepareAsset(dataUrl);
   sigAssetImg.src = dataUrl;
   sigAssetPreview.classList.remove('hidden');
+}
+
+async function setPreparedStempel(dataUrl) {
+  preparedStempelAsset = await prepareAsset(dataUrl);
+  stempelAssetImg.src = dataUrl;
+  stempelAssetPreview.classList.remove('hidden');
 }
 
 clearSigAssetBtn.addEventListener('click', () => {
   preparedSignatureAsset = null;
   sigAssetPreview.classList.add('hidden');
+});
+
+clearStempelAssetBtn.addEventListener('click', () => {
+  preparedStempelAsset = null;
+  stempelAssetPreview.classList.add('hidden');
 });
 
 uploadSigBtn.addEventListener('click', () => sigFileInput.click());
@@ -548,9 +688,39 @@ sigFileInput.addEventListener('change', () => {
   sigFileInput.value = '';
 });
 
-// --- Modal gambar tanda tangan ---
+uploadStempelBtn.addEventListener('click', () => stempelFileInput.click());
+stempelFileInput.addEventListener('change', () => {
+  const file = stempelFileInput.files[0];
+  if (!file) return;
+  if (file.type !== 'image/png') {
+    alert('Gambar stempel harus berformat PNG (agar latar belakang transparan).');
+    stempelFileInput.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => setPreparedStempel(reader.result);
+  reader.readAsDataURL(file);
+  stempelFileInput.value = '';
+});
+
+// --- Modal gambar tanda tangan (dengan pilihan warna) ---
 let sigPadDrawing = false;
 let sigPadCtx = null;
+
+sigColorSwatches.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    currentSigColor = btn.dataset.color;
+    sigColorSwatches.forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    sigColorCustom.value = currentSigColor;
+    if (sigPadCtx) sigPadCtx.strokeStyle = currentSigColor;
+  });
+});
+sigColorCustom.addEventListener('input', () => {
+  currentSigColor = sigColorCustom.value;
+  sigColorSwatches.forEach((b) => b.classList.remove('active'));
+  if (sigPadCtx) sigPadCtx.strokeStyle = currentSigColor;
+});
 
 function setupSigPadCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -562,7 +732,7 @@ function setupSigPadCanvas() {
   sigPadCtx.lineWidth = 3;
   sigPadCtx.lineCap = 'round';
   sigPadCtx.lineJoin = 'round';
-  sigPadCtx.strokeStyle = '#111827';
+  sigPadCtx.strokeStyle = currentSigColor;
   sigPadCtx.clearRect(0, 0, sigPadCanvas.width, sigPadCanvas.height);
 }
 
@@ -666,8 +836,8 @@ previewBtn.addEventListener('click', async () => {
     const { quality, dpi, targetKb } = currentSettings();
     const samplePageEntry = pages[0];
     const page = await getPageProxy(samplePageEntry.fileIndex, samplePageEntry.pageNumInFile);
-    const { canvas } = await renderPageOriented(page, dpi, samplePageEntry.userRotation);
-    await bakeSignatures(canvas, samplePageEntry.signatures);
+    const { canvas, landscape } = await renderPageOriented(page, dpi, samplePageEntry.userRotation);
+    await bakeSignatures(canvas, samplePageEntry.signatures, landscape);
 
     let usedQuality = quality, hitTarget = true, sampleBytes;
     if (targetKb) {
@@ -723,7 +893,7 @@ processBtn.addEventListener('click', async () => {
       const entry = pages[i];
       const page = await getPageProxy(entry.fileIndex, entry.pageNumInFile);
       const { canvas, landscape } = await renderPageOriented(page, dpi, entry.userRotation);
-      await bakeSignatures(canvas, entry.signatures);
+      await bakeSignatures(canvas, entry.signatures, landscape);
       rendered.push({ canvas, landscape });
       setProgress(Math.round(((i + 1) / pages.length) * 70));
     }
