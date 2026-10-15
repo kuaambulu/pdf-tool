@@ -73,7 +73,19 @@
         .page-card .rotate-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 6px; }
         .page-card .rotate-row button { background: #e2e8f0; border: none; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; }
         .page-card .rotate-row button:hover { background: #cbd5e1; }
-        .page-card .place-sig-btn { width: 100%; font-size: 12px; padding: 7px; }
+        .page-card .place-sig-row { display: flex; gap: 6px; }
+        .page-card .place-sig-row .btn { flex: 1; font-size: 12px; padding: 7px; width: auto; }
+
+        .sig-size-list { margin-top: 8px; }
+        .sig-size-row { display: flex; align-items: center; gap: 6px; font-size: 11px; background: #f1f5f9; border-radius: 5px; padding: 4px 6px; margin-bottom: 4px; }
+        .sig-size-row .sig-row-label { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sig-size-row input[type="number"] { width: 50px; padding: 3px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 11px; }
+        .sig-size-row .sig-row-delete { border: none; background: none; color: #dc2626; cursor: pointer; font-weight: bold; font-size: 13px; }
+
+        .color-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .color-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+        .color-swatch.active { border-color: #1e293b; box-shadow: 0 0 0 2px white inset; }
+        #sig-color-custom { width: 36px; height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0; cursor: pointer; background: none; }
 
         .sig-overlay { position: absolute; cursor: move; touch-action: none; border: 1px dashed transparent; }
         .sig-overlay:hover { border-color: var(--primary); }
@@ -122,7 +134,7 @@
         <div class="hint" style="margin-bottom:14px;">Halaman lanskap (lebar) kini ditampilkan apa adanya — tidak lagi dipaksa menjadi potret. Gunakan tombol rotasi bila ada halaman hasil scan yang miring/terbalik.</div>
 
         <fieldset>
-            <legend>🖋️ Tanda Tangan / Stempel</legend>
+            <legend>✍️ Tanda Tangan (TTD)</legend>
             <div class="sig-asset-row">
                 <button class="btn btn-small btn-secondary" id="draw-sig-btn" type="button">✍️ Gambar Tanda Tangan</button>
                 <button class="btn btn-small btn-secondary" id="upload-sig-btn" type="button">📁 Unggah Gambar (PNG/JPEG)</button>
@@ -133,7 +145,21 @@
                     <button id="clear-sig-asset-btn" title="Hapus">✕</button>
                 </div>
             </div>
-            <div class="hint">Gunakan gambar PNG transparan agar tanda tangan menyatu rapi dengan dokumen (bukan kotak putih). Setelah siap, klik "📌 Tempel di sini" pada halaman yang dituju, lalu geser/ubah ukurannya langsung di atas pratinjau.</div>
+            <div class="hint">Gunakan gambar PNG transparan agar tanda tangan menyatu rapi dengan dokumen (bukan kotak putih). Setelah siap, klik "📌 TTD" pada halaman yang dituju, lalu geser/ubah ukurannya langsung di atas pratinjau — atau atur ukuran presisi (mm) di daftar bawah kartu halaman.</div>
+        </fieldset>
+
+        <fieldset>
+            <legend>🔖 Stempel (PNG)</legend>
+            <div class="sig-asset-row">
+                <button class="btn btn-small btn-secondary" id="upload-stempel-btn" type="button">📁 Unggah Gambar Stempel (PNG)</button>
+                <input type="file" id="stempel-file-input" accept="image/png" style="display:none;">
+                <div class="sig-asset-preview hidden" id="stempel-asset-preview">
+                    <img id="stempel-asset-img" alt="Pratinjau stempel">
+                    <span style="font-size:12px; color:#166534;">Siap ditempel</span>
+                    <button id="clear-stempel-asset-btn" title="Hapus">✕</button>
+                </div>
+            </div>
+            <div class="hint">Wajib PNG transparan (bukan JPEG) agar latar belakang stempel tidak menutupi dokumen. Setelah siap, klik "📌 Stempel" pada halaman yang dituju.</div>
         </fieldset>
 
         <div id="page-grid"></div>
@@ -201,6 +227,13 @@
     <div class="modal-overlay" id="sig-modal">
         <div class="modal-box">
             <h3>✍️ Gambar Tanda Tangan</h3>
+            <div class="color-row" id="sig-color-row">
+                <span class="hint" style="margin:0;">Warna:</span>
+                <button type="button" class="color-swatch active" data-color="#1e3a8a" style="background:#1e3a8a" title="Biru Tua"></button>
+                <button type="button" class="color-swatch" data-color="#111827" style="background:#111827" title="Hitam"></button>
+                <button type="button" class="color-swatch" data-color="#1d4ed8" style="background:#1d4ed8" title="Biru"></button>
+                <input type="color" id="sig-color-custom" value="#1e3a8a" title="Warna kustom">
+            </div>
             <canvas id="sig-pad-canvas"></canvas>
             <div class="hint">Gambar dengan mouse atau jari. Latar belakang otomatis transparan.</div>
             <div class="modal-actions">
